@@ -1,0 +1,4 @@
+/venv/
+*.csv
+postgresDBSamples/
+__pycache__/
