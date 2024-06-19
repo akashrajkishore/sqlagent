@@ -1,14 +1,15 @@
 
 from langchain_core.tools import tool
 from typing import Annotated
-from langchain_core.pydantic_v1 import BaseModel
+
 from typing_extensions import TypedDict
-from tabledetails import table_details
+from prompts import prompt
 from langgraph.graph.message import AnyMessage, add_messages
 import csv
 import psycopg2
 from typing import Annotated
-
+import requests
+import re
 from langchain_openai import ChatOpenAI
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -26,10 +27,10 @@ def get_data_from_database(sql_query:str)->str:
 
 # Define your database connection parameters
     db_params = {
-        'dbname': 'dvdrental',
-        'user': 'postgres',
-        'password': 'akashraj',
-        'host': 'localhost',  # e.g., 'localhost' or '127.0.0.1'
+        'dbname': 'postgres',
+        'user': 'aura_admin',
+        'password': 'England125',
+        'host': 'auradata.postgres.database.azure.com',  # e.g., 'localhost' or '127.0.0.1'
         'port': '5432'  # e.g., '5432'
     }
 
@@ -41,7 +42,7 @@ def get_data_from_database(sql_query:str)->str:
         cursor = connection.cursor()
 
         # Execute a query
-        cursor.execute(sql_query+";")
+        cursor.execute(sql_query)
 
         # Fetch all results from the executed query
         rows = cursor.fetchall()
@@ -55,9 +56,6 @@ def get_data_from_database(sql_query:str)->str:
     # Write the data to a CSV file
         with open(csv_file, mode='w', newline='') as file:
             writer = csv.writer(file)
-            
-            # Optional: Write the header
-            
             
             # Write the data rows
             writer.writerows(data)
@@ -75,6 +73,42 @@ def get_data_from_database(sql_query:str)->str:
             cursor.close()
         if connection:
             connection.close()
+
+
+@tool
+def get_sql_query(user_request:str)->str:
+    """Get an SQL query to fulfill the user's request. Returns an SQL query if the operation is successful. """
+
+    url = 'https://databee-engine.azurewebsites.net/api/v1/prompts/sql-generations'
+    text=user_request
+    data = {
+        "finetuning_id": "",
+        "evaluate": False,
+        "metadata": {},
+        "prompt": {
+            "text": user_request,
+            "db_connection_id": "666219d8f359460d6cc32410",
+            "metadata": {}
+        },
+        "low_latency_mode": False
+    }
+
+    response = requests.post(url, json=data)
+
+    if response.status_code == 201:
+        print("Status Code:", response.status_code)
+        
+        response_json = response.json()
+
+        sql_query = response_json.get('sql')
+        # To extract the SQL query from the text:
+        pattern = re.compile(r'SELECT.*?;', re.DOTALL | re.IGNORECASE)
+        match = pattern.search(sql_query)
+        return match.group(0)
+
+    else:
+        print("Status code: ",response.status_code)
+        return "Unable to get SQL query"
 #----------------------------------------------------------------------------------------------------------------------------Tools End
     
 from langchain_core.runnables import RunnableLambda
@@ -154,7 +188,7 @@ llm = ChatOpenAI(model="gpt-3.5-turbo")
 assistant_prompt1 = ChatPromptTemplate.from_messages(
     [
         (
-           table_details
+           prompt
 
         ),
         ("placeholder", "{messages}"),
@@ -188,7 +222,7 @@ class Assistant:
                 break
         return {"messages": result}
 
-tools = [get_data_from_database]
+tools = [get_data_from_database,get_sql_query]
 tool_names = {t.name for t in tools}
 
 assistant_runnable = assistant_prompt1 | llm.bind_tools(tools)
