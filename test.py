@@ -91,36 +91,7 @@ def get_data_from_database_and_create_report(sql_query:str)->str:
 def get_sql_query(user_request:str)->str:
     """Get an SQL query to fulfill the user's request. Returns an SQL query if the operation is successful. """
 
-    url = 'https://databee-engine.azurewebsites.net/api/v1/prompts/sql-generations'
-    text=user_request
-    data = {
-        "finetuning_id": "",
-        "evaluate": False,
-        "metadata": {},
-        "prompt": {
-            "text": user_request,
-            "db_connection_id": "666219d8f359460d6cc32410",
-            "metadata": {}
-        },
-        "low_latency_mode": False
-    }
-
-    response = requests.post(url, json=data)
-
-    if response.status_code == 201:
-        print("Status Code:", response.status_code)
-        
-        response_json = response.json()
-
-        sql_query = response_json.get('sql')
-        # To extract the SQL query from the text:
-        pattern = re.compile(r'SELECT.*?;', re.DOTALL | re.IGNORECASE)
-        match = pattern.search(sql_query)
-        return match.group(0)
-
-    else:
-        print("Status code: ",response.status_code)
-        return "Unable to get SQL query"
+    return "SELECT * FROM dwd_cpty_persons WHERE record_valid_to = '9999-12-31';"
     
 @tool
 def get_data_from_database(sql_query:str)->list:
