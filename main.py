@@ -192,7 +192,15 @@ class Assistant:
                 break
         return {"messages": result}
 
-llm = AzureChatOpenAI(model="gpt-3.5-turbo",api_key=azure_key,api_version=os.getenv('OPENAI_API_VERSION'))
+
+# llm = AzureChatOpenAI(model="gpt-3.5-turbo",api_key=azure_key,api_version=os.getenv('OPENAI_API_VERSION'))
+api_base = "https://askauraopenai.openai.azure.com/"
+api_version = "2024-02-01"
+
+llm = AzureChatOpenAI(deployment_name="chat",
+                      openai_api_key=azure_key,
+                      azure_endpoint=api_base,
+                      api_version=api_version)
 
 assistant_prompt1 = ChatPromptTemplate.from_messages(
     [
