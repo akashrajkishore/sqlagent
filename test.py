@@ -1,14 +1,16 @@
 
 from langchain_core.tools import tool
 from typing import Annotated
-
+from utils import execute_query,write_headings_to_csv,write_rows_to_csv
 from typing_extensions import TypedDict
-from prompts import prompt
+from prompts import prompt, chart_creator_prompt
 from langgraph.graph.message import AnyMessage, add_messages
 import csv
 import psycopg2
 from typing import Annotated
 import requests
+from langchain_openai import AzureChatOpenAI
+
 import re
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
@@ -27,71 +29,31 @@ from langgraph.graph.message import AnyMessage, add_messages
 def get_data_from_database_and_create_report(sql_query:str)->str:
     """ A tool that will fetch data from the database using the SQL query and use it to create a document file. Returns the URL of the created file."""
     
+   
+    csv_file = 'output.csv'
+    result = execute_query(sql_query)
+    col_names = result[0]  # First item in the tuple
+    data = result[1]  # Second item in the tuple
     
-
-# Define your database connection parameters
-    db_params = {
-        'dbname': 'postgres',
-        'user': 'aura_admin',
-        'password': 'England125',
-        'host': 'auradata.postgres.database.azure.com',  # e.g., 'localhost' or '127.0.0.1'
-        'port': '5432'  # e.g., '5432'
-    }
-
-    try:
-        # Connect to your postgres DB
-        connection = psycopg2.connect(**db_params)
-
-        # Create a cursor object
-        cursor = connection.cursor()
-
-        # Execute a query
-        cursor.execute(sql_query)
-
-        # Fetch all results from the executed query
-        rows = cursor.fetchall()
-        data=[]
-        # Print fetched rows
-        for row in rows:
-            data.append(row)
-
-        csv_file = 'output.csv'
-
-    # Write the data to a CSV file
-        with open(csv_file, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            
-            # Write the data rows
-            writer.writerows(data)
-
-        print(f"Data has been written to {csv_file}")
-        # Upload to blob:
-        file_path = "output.csv"
-        task = uuid.uuid4().hex
-        blob_name = f"{task}.csv"
-        upload_to_blob(file_path=file_path,blob_name=blob_name)
-        blob_url = get_blob_url(blob_name)
+    write_headings_to_csv(csv_file,col_names)
+    write_rows_to_csv(csv_file,data)
+   
+    
+    # Upload to blob:
+    task = uuid.uuid4().hex
+    blob_name = f"{task}.csv"
+    upload_to_blob(file_path=csv_file,blob_name=blob_name)
+    blob_url = get_blob_url(blob_name)
 
 
-        return blob_url
-
-    except Exception as error:
-        print(f"Error: {error}")
-        return "operation failed"
-
-    finally:
-        # Close the cursor and connection to the database
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
+    return blob_url
 
 
 @tool
 def get_sql_query(user_request:str)->str:
     """Get an SQL query to fulfill the user's request. Returns an SQL query if the operation is successful. """
 
-    return "SELECT * FROM dwd_cpty_persons WHERE record_valid_to = '9999-12-31';"
+    return "SELECT * FROM dwd_cpty_persons;"
     
 @tool
 def get_data_from_database(sql_query:str)->list:
@@ -134,6 +96,33 @@ def get_data_from_database(sql_query:str)->list:
             cursor.close()
         if connection:
             connection.close()
+
+@tool
+def create_chart(user_input:str)->str:
+    """ Create a chart based on user input"""
+
+    deployment_name= os.getenv('DEPLOYMENT_NAME')
+    
+
+
+    llm2 = ChatOpenAI(
+                deployment_name=deployment_name,
+                temperature=0,
+                model='gpt-3.5-turbo',
+                api_key=os.getenv('OPENAI_API_KEY')
+            )
+    
+    messages = [
+        {"role": "system", "content": chart_creator_prompt},
+        {"role": "user", "content": user_input}]
+    response=llm2.invoke(messages)
+    code=response.content
+
+    with open("generated_script.py", "w") as file:
+        file.write(code)
+    import subprocess
+    venv='C:/Users/Akash/Work/sqlagent/venv/Scripts/python.exe'
+    subprocess.run([venv, "generated_script.py"])
 #----------------------------------------------------------------------------------------------------------------------------Tools End
     
 from langchain_core.runnables import RunnableLambda
@@ -157,6 +146,9 @@ def handle_tool_error(state) -> dict:
 
 
 from azure.storage.blob import BlobServiceClient
+
+def contains_character(string, char):
+    return char in string
 
 def upload_to_blob(file_path: str, blob_name: str):
 
@@ -264,7 +256,7 @@ class Assistant:
                 break
         return {"messages": result}
 
-tools = [get_data_from_database,get_sql_query,get_data_from_database_and_create_report]
+tools = [get_sql_query,get_data_from_database_and_create_report,create_chart]
 tool_names = {t.name for t in tools}
 
 assistant_runnable = assistant_prompt1 | llm.bind_tools(tools)

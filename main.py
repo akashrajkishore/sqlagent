@@ -10,7 +10,7 @@ import psycopg2
 from typing import Annotated
 import requests
 import re
-from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI
 from dotenv import load_dotenv
 import os
 
@@ -21,6 +21,10 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import TypedDict
 
 from langgraph.graph.message import AnyMessage, add_messages
+
+openai_key="sk-proj-DUlMczvzma1uUIEaXUybT3BlbkFJZUEsoUweyXlmzVRcaTxa"
+azure_key="43acd730f49d47b494589ffefa5028fa"
+
 
 #------------------------------------------------------------------------------------------------------------------------------Tools
 @tool
@@ -188,7 +192,7 @@ class Assistant:
                 break
         return {"messages": result}
 
-llm = ChatOpenAI(model="gpt-3.5-turbo",api_key=os.getenv('OPENAI_API_KEY'))
+llm = AzureChatOpenAI(model="gpt-3.5-turbo",api_key=azure_key,api_version=os.getenv('OPENAI_API_VERSION'))
 
 assistant_prompt1 = ChatPromptTemplate.from_messages(
     [
