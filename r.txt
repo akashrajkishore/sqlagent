@@ -6,3 +6,5 @@ psycopg2
 requests
 azure-storage-blob
 python-dotenv
+pandas
+plotly
