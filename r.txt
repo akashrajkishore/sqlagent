@@ -2,7 +2,7 @@ langchain_core
 langgraph
 langchain
 langchain_openai
-psycopg2
+psycopg2-binary
 requests
 azure-storage-blob
 python-dotenv
