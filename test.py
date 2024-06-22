@@ -105,15 +105,6 @@ def get_data_from_database(sql_query:str)->list:
 def create_chart(user_input:str)->str:
     """ Create a chart based on user input. Returns the URL of the chart."""
 
-    deployment_name= os.getenv('DEPLOYMENT_NAME')
-    
-
-
-    lllm = AzureChatOpenAI(deployment_name="chat",
-                      openai_api_key=azure_key,
-                      azure_endpoint=api_base,
-                      api_version=api_version)
-    
     try:
         messages = [
             {"role": "system", "content": chart_creator_prompt},
@@ -339,9 +330,7 @@ for i in range(100):
         _print_event(event, _printed)
     snapshot = graph.get_state(config)
     while snapshot.next:
-        # We have an interrupt! The agent is trying to use a tool, and the user can approve or deny it
-        # Note: This code is all outside of your graph. Typically, you would stream the output to a UI.
-        # Then, you would have the frontend trigger a new run via an API call when the user has provided input.
+       
         user_input = input(
             "Do you approve of the above actions? Type 'y' to continue;"
             " otherwise, explain your requested changed.\n\n"
