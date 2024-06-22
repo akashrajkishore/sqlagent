@@ -122,7 +122,7 @@ def create_chart(user_input:str)->str:
         with open("generated_script.py", "w") as file:
             file.write(code)
         import subprocess
-        venv='C:/Users/Akash/Work/sqlagent/venv/Scripts/python.exe'
+        venv='venv/Scripts/python.exe'
         subprocess.Popen([venv, "generated_script.py"])
         return "Chart is at http://127.0.0.1:8500/"
     
