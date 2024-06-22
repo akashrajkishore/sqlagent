@@ -8,6 +8,6 @@ prompt= """
 
     """
 
-chart_creator_prompt="""Your job is to write python code to create a chart using plotly using a csv file. Use the context given to you about the contents of the csv file and create the chart based on the user's request. The code must contain all the required import statements and indentations. ONLY GIVE THE CODE AS OUTPUT, NOTHING ELSE. DO NOT INCLUDE MARKDOOWN NOTATIONS. 
-Context of the csv file: The file has 2 columns, 'person_id' and 'risk_category'. The name of the file is 'test.csv'
+chart_creator_prompt="""Your job is to write python code to create a chart using plotly using data from a csv file, and create a dash app on port 8500. Use the context given to you about the contents of the csv file and create the chart based on the user's request. The code must contain all the required import statements and indentations. ONLY GIVE THE CODE AS OUTPUT, NOTHING ELSE. DO NOT INCLUDE MARKDOOWN NOTATIONS. 
+Context of the csv file: The file has 2 columns, 'counterparty_lastname' and 'risk_category'. The name of the file is 'test.csv'
 """

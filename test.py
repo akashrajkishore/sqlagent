@@ -24,6 +24,10 @@ from typing_extensions import TypedDict
 
 from langgraph.graph.message import AnyMessage, add_messages
 
+azure_key="43acd730f49d47b494589ffefa5028fa"
+api_base = "https://askauraopenai.openai.azure.com/"
+api_version = "2024-02-01"
+
 #------------------------------------------------------------------------------------------------------------------------------Tools
 @tool
 def get_data_from_database_and_create_report(sql_query:str)->str:
@@ -99,30 +103,35 @@ def get_data_from_database(sql_query:str)->list:
 
 @tool
 def create_chart(user_input:str)->str:
-    """ Create a chart based on user input"""
+    """ Create a chart based on user input. Returns the URL of the chart."""
 
     deployment_name= os.getenv('DEPLOYMENT_NAME')
     
 
 
-    llm2 = ChatOpenAI(
-                deployment_name=deployment_name,
-                temperature=0,
-                model='gpt-3.5-turbo',
-                api_key=os.getenv('OPENAI_API_KEY')
-            )
+    lllm = AzureChatOpenAI(deployment_name="chat",
+                      openai_api_key=azure_key,
+                      azure_endpoint=api_base,
+                      api_version=api_version)
     
-    messages = [
-        {"role": "system", "content": chart_creator_prompt},
-        {"role": "user", "content": user_input}]
-    response=llm2.invoke(messages)
-    code=response.content
+    try:
+        messages = [
+            {"role": "system", "content": chart_creator_prompt},
+            {"role": "user", "content": user_input}]
+        response=llm.invoke(messages)
+        code=response.content
 
-    with open("generated_script.py", "w") as file:
-        file.write(code)
-    import subprocess
-    venv='C:/Users/Akash/Work/sqlagent/venv/Scripts/python.exe'
-    subprocess.run([venv, "generated_script.py"])
+        with open("generated_script.py", "w") as file:
+            file.write(code)
+        import subprocess
+        venv='C:/Users/Akash/Work/sqlagent/venv/Scripts/python.exe'
+        subprocess.Popen([venv, "generated_script.py"])
+        return "Chart is at http://127.0.0.1:8500/"
+    
+    except Exception as error:
+        print(error)
+        return "An error has occurred, try again"
+        
 #----------------------------------------------------------------------------------------------------------------------------Tools End
     
 from langchain_core.runnables import RunnableLambda
@@ -217,8 +226,10 @@ class Assistant:
                 break
         return {"messages": result}
 
-llm = ChatOpenAI(model="gpt-3.5-turbo",api_key=os.getenv('OPENAI_API_KEY'))
-
+llm = AzureChatOpenAI(deployment_name="chat",
+                      openai_api_key=azure_key,
+                      azure_endpoint=api_base,
+                      api_version=api_version)
 assistant_prompt1 = ChatPromptTemplate.from_messages(
     [
         (
