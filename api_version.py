@@ -97,8 +97,12 @@ def get_data_from_database(sql_query:str)->list:
     try:
         result = execute_query(sql_query)
         data = result[1]  # Second item in the tuple
+        if len(data)>1:
+            return "output is too long, use the 'get_data_from_database_and_create_report' function"
+        else:
+            return data
 
-        return data
+        
     except:
         return "Operation failed"
     
@@ -247,7 +251,7 @@ class Assistant:
                 break
         return {"messages": result}
 
-tools = [get_sql_query,get_data_from_database_and_create_report,get_data_from_database,create_chart]
+tools = [get_sql_query,get_data_from_database,get_data_from_database_and_create_report,create_chart]
 tool_names = {t.name for t in tools}
 
 assistant_runnable = assistant_prompt1 | llm.bind_tools(tools)

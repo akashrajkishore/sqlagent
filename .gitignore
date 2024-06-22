@@ -3,3 +3,4 @@
 postgresDBSamples/
 __pycache__/
 generated_script.py
+test.py

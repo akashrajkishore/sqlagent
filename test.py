@@ -63,43 +63,17 @@ def get_sql_query(user_request:str)->str:
 def get_data_from_database(sql_query:str)->list:
     """A tool that will fetch data from the database using the SQL query and return the output of the executed query"""
     
-    db_params = {
-        'dbname': 'postgres',
-        'user': 'aura_admin',
-        'password': 'England125',
-        'host': 'auradata.postgres.database.azure.com',  # e.g., 'localhost' or '127.0.0.1'
-        'port': '5432'  # e.g., '5432'
-    }
-
     try:
-        # Connect to your postgres DB
-        connection = psycopg2.connect(**db_params)
+        result = execute_query(sql_query)
+        data = result[1]  # Second item in the tuple
+        if len(data)>1:
+            return "output is too long, use the 'get_data_from_database_and_create_report' function"
+        else:
+            return data
 
-        # Create a cursor object
-        cursor = connection.cursor()
-
-        # Execute a query
-        cursor.execute(sql_query)
-
-        # Fetch all results from the executed query
-        rows = cursor.fetchall()
-        data=[]
-        # Print fetched rows
-        for row in rows:
-            data.append(row)
-
-        return data
-    
-    except Exception as error:
-        print(f"Error: {error}")
-        return "operation failed"
-
-    finally:
-        # Close the cursor and connection to the database
-        if cursor:
-            cursor.close()
-        if connection:
-            connection.close()
+        
+    except:
+        return "Operation failed"
 
 @tool
 def create_chart(user_input:str)->str:
@@ -115,7 +89,7 @@ def create_chart(user_input:str)->str:
         with open("generated_script.py", "w") as file:
             file.write(code)
         import subprocess
-        venv='C:/Users/Akash/Work/sqlagent/venv/Scripts/python.exe'
+        venv='venv/Scripts/python.exe'
         subprocess.Popen([venv, "generated_script.py"])
         return "Chart is at http://127.0.0.1:8500/"
     
@@ -258,7 +232,7 @@ class Assistant:
                 break
         return {"messages": result}
 
-tools = [get_sql_query,get_data_from_database_and_create_report,create_chart]
+tools = [get_sql_query,get_data_from_database,get_data_from_database_and_create_report,create_chart]
 tool_names = {t.name for t in tools}
 
 assistant_runnable = assistant_prompt1 | llm.bind_tools(tools)

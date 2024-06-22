@@ -91,11 +91,16 @@ def get_sql_query(user_request:str)->str:
 @tool
 def get_data_from_database(sql_query:str)->list:
     """A tool that will fetch data from the database using the SQL query and return the output of the executed query"""
-    data=execute_query(sql_query)
-    if len(data)>1:
-        return data
-    else:
-        return "output is too long, use the 'get_data_from_database_and_create_report' function"
+    try:
+        result = execute_query(sql_query)
+        data = result[1]  # Second item in the tuple
+        if len(data)>1:
+            return "output is too long, use the 'get_data_from_database_and_create_report' function"
+        else:
+            return data
+        
+    except:
+        return "Operation failed"
 
  
 @tool
