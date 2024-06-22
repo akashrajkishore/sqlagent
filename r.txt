@@ -8,4 +8,4 @@ azure-storage-blob
 python-dotenv
 pandas
 plotly
-kaleido
+fastapi
