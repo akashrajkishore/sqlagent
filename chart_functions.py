@@ -52,21 +52,21 @@ llm = AzureChatOpenAI(deployment_name="chat",
 
 
 @tool
-def create_bar_chart(csv_file_name:str,chart_title:str,x_axis:str,y_axis:str,group_by:str):
+def create_bar_chart(csv_file_name:str,chart_title:str,x_axis:str,y_axis:str,group_by:str=None):
     """Create a bar chart.
 
     Args:
     chart_title (str) : Title of the chart
     x_axis (str) : x axis value
     y_axis (str) : y axis value
-    group_by (str) : value to be counted or grouped by
+    group_by (str) : value to be counted or grouped by if required
 
     """
-    
+    data = pd.read_csv(csv_file_name,encoding='latin-1')
+ 
     
     if group_by is not None:
     
-        data = pd.read_csv(csv_file_name,encoding='latin-1')
 
         # Count the number of people by age
         counts = data[group_by].value_counts().reset_index()
@@ -74,28 +74,43 @@ def create_bar_chart(csv_file_name:str,chart_title:str,x_axis:str,y_axis:str,gro
 
         # Create a bar chart
         fig = px.bar(counts, x=x_axis, y=y_axis, title=chart_title)
-        fig.write_html("chart.html")
 
-        return "chart URL - http://exampleurl.com/"
+    else:
+        fig = px.bar(data, x=x_axis, y=y_axis, title=chart_title)
+
+    fig.write_html("chart.html")
+    print("chart.html is created")
+
+    return "chart URL - http://exampleurl.com/"
+
     
 @tool
-def create_pie_chart(csv_file_name:str,chart_title:str,group_by:str):
+def create_pie_chart(csv_file_name:str,chart_title:str,values:str,label:str,group_by:str=None):
     """Create a pie chart
 
     Args:
         chart_title (str) : Title of the chart
-        group_by (str) : value to be counted or grouped by
+        group_by (str, optional) : value to be counted or grouped by if required
+        values (str) : value that determines the size of each slice in the pie chart.
+        label (str) : label for slices in the pie chart
 
     """
     
     data = pd.read_csv(csv_file_name,encoding='latin-1')
 
-    counts = data[group_by].value_counts().reset_index()
-    counts.columns = [group_by, 'Value']
+    if group_by is not None:
 
-# Create a pie chart
-    fig = px.pie(counts, values='Value', names=group_by, title=chart_title)
+        counts = data[group_by].value_counts().reset_index()
+        counts.columns = [group_by, 'Value']
+
+
+        fig = px.pie(counts, values=values, names=group_by, title=chart_title)
+
+    else:
+        fig = px.pie(data, values=values, names=label, title=chart_title)
+
     fig.write_html("chart.html")
+    print("chart.html is created")
 
     return "chart URL - http://exampleurl.com/"
 
@@ -113,6 +128,8 @@ def create_line_chart(csv_file_name:str,chart_title:str,x_axis:str,y_axis:str):
     data = pd.read_csv(csv_file_name,encoding='latin-1')
     fig = px.line(data, x=x_axis, y=y_axis, title=chart_title)
     fig.write_html("chart.html")
+    print("chart.html is created")
+
 
     return "chart URL - http://exampleurl.com/"
     
@@ -139,4 +156,3 @@ def chart_creator(user_request,csv_file_url):
         tool_output = selected_tool.invoke(tool_call["args"])
         return tool_output
 
-res= chart_creator("create a chart that shows number of poeple by risk category","https://devbeekle.blob.core.windows.net/reports/74902eb4f7f8490cb5a1e97adb275e30.csv")
