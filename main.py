@@ -1,7 +1,8 @@
 
 from langchain_core.tools import tool
 from typing import Annotated
-from utils import execute_query,write_headings_to_csv,write_rows_to_csv
+from utils import execute_query,write_headings_to_csv,write_rows_to_csv,extract_column_names
+from chart_functions import chart_creator
 from typing_extensions import TypedDict
 from prompts import prompt, chart_creator_prompt
 from langgraph.graph.message import AnyMessage, add_messages
@@ -34,18 +35,18 @@ def get_data_from_database_and_create_report(sql_query:str)->str:
     """ A tool that will fetch data from the database using the SQL query and use it to create a document file. Returns the URL of the created file."""
     
    
-    csv_file = 'output.csv'
-    result = execute_query(sql_query)
-    col_names = result[0]  # First item in the tuple
-    data = result[1]  # Second item in the tuple
+    task = uuid.uuid4().hex
+    csv_file=f"{task}.csv"
+    output = execute_query(sql_query)
+    col_names = output[0]  # First item in the tuple
+    data = output[1]  # Second item in the tuple
     
     write_headings_to_csv(csv_file,col_names)
     write_rows_to_csv(csv_file,data)
    
     
     # Upload to blob:
-    task = uuid.uuid4().hex
-    blob_name = f"{task}.csv"
+    blob_name = csv_file
     upload_to_blob(file_path=csv_file,blob_name=blob_name)
     blob_url = get_blob_url(blob_name)
 
@@ -55,10 +56,13 @@ def get_data_from_database_and_create_report(sql_query:str)->str:
 
 @tool
 def get_sql_query(user_request:str)->str:
-    """Get an SQL query to fulfill the user's request. Returns an SQL query if the operation is successful. """
+    """Get an SQL query to fulfill the user's request. Returns an SQL query if the operation is successful. 
+    Args:
+        user_request (str) : The user's request
+    """
 
     url = 'https://databee-engine.azurewebsites.net/api/v1/prompts/sql-generations'
-    text=user_request
+    
     data = {
         "finetuning_id": "",
         "evaluate": False,
@@ -90,37 +94,44 @@ def get_sql_query(user_request:str)->str:
     
 @tool
 def get_data_from_database(sql_query:str)->list:
-    """A tool that will fetch data from the database using the SQL query and return the output of the executed query"""
+    """A tool that will fetch data from the database using the SQL query and return the output of the executed query
+
+    Args:
+        sql_query (str): The SQL query that is to be executed.
+
+    Returns:
+        str: Output of the executed SQL query
+    """
     try:
-        result = execute_query(sql_query)
-        data = result[1]  # Second item in the tuple
+        output = execute_query(sql_query)
+        data = output[1]  # Second item in the tuple
         if len(data)>1:
             return "output is too long, use the 'get_data_from_database_and_create_report' function"
         else:
-            return data
+            return data[0]
         
     except:
         return "Operation failed"
 
  
 @tool
-def create_chart(user_request:str)->str:
-    """ Create a chart based on user request. Returns the URL of the chart."""
+def create_chart(user_request:str,csv_file_url:str)->str:
+    """ Create a chart based on user request. Returns the URL of the chart.
+    
+    Args:
+        user_request (str): A detailed explanation of the user's request with clear context.
+        csv_file_url (str): URL of a csv file.
+
+    Returns:
+        str : URL of created chart.
+    """
 
     
+    
+    
     try:
-        messages = [
-            {"role": "system", "content": chart_creator_prompt},
-            {"role": "user", "content": user_request}]
-        response=llm.invoke(messages)
-        code=response.content
-
-        with open("generated_script.py", "w") as file:
-            file.write(code)
-        import subprocess
-        venv='C:/Users/Akash/Work/sqlagent/venv/Scripts/python.exe'
-        subprocess.Popen([venv, "generated_script.py"])
-        return "Chart is at http://127.0.0.1:8500/"
+        output=chart_creator(user_request,csv_file_url)
+        return output
     
     except Exception as error:
         print(error)
@@ -332,32 +343,4 @@ for i in range(100):
     for event in events:
         _print_event(event, _printed)
     snapshot = graph.get_state(config)
-    while snapshot.next:
-        # We have an interrupt! The agent is trying to use a tool, and the user can approve or deny it
-        # Note: This code is all outside of your graph. Typically, you would stream the output to a UI.
-        # Then, you would have the frontend trigger a new run via an API call when the user has provided input.
-        user_input = input(
-            "Do you approve of the above actions? Type 'y' to continue;"
-            " otherwise, explain your requested changed.\n\n"
-        )
-        if user_input.strip() == "y":
-            # Just continue
-            result = graph.invoke(
-                None,
-                config,
-            )
-        else:
-            # Satisfy the tool invocation by
-            # providing instructions on the requested changes / change of mind
-            result = graph.invoke(
-                {
-                    "messages": [
-                        ToolMessage(
-                            tool_call_id=event["messages"][-1].tool_calls[0]["id"],
-                            content=f"API call denied by user. Reasoning: '{user_input}'. Continue assisting, accounting for the user's input.",
-                        )
-                    ]
-                },
-                config,
-            )
-        snapshot = graph.get_state(config)
+   

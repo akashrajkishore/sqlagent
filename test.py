@@ -10,6 +10,7 @@ import psycopg2
 from typing import Annotated
 import requests
 from langchain_openai import AzureChatOpenAI
+from chart_functions import chart_creator
 
 import re
 from langchain_openai import ChatOpenAI
@@ -34,18 +35,18 @@ def get_data_from_database_and_create_report(sql_query:str)->str:
     """ A tool that will fetch data from the database using the SQL query and use it to create a document file. Returns the URL of the created file."""
     
    
-    csv_file = 'output.csv'
-    result = execute_query(sql_query)
-    col_names = result[0]  # First item in the tuple
-    data = result[1]  # Second item in the tuple
+    task = uuid.uuid4().hex
+    csv_file=f"{task}.csv"
+    output = execute_query(sql_query)
+    col_names = output[0]  # First item in the tuple
+    data = output[1]  # Second item in the tuple
     
     write_headings_to_csv(csv_file,col_names)
     write_rows_to_csv(csv_file,data)
    
     
     # Upload to blob:
-    task = uuid.uuid4().hex
-    blob_name = f"{task}.csv"
+    blob_name = csv_file
     upload_to_blob(file_path=csv_file,blob_name=blob_name)
     blob_url = get_blob_url(blob_name)
 
@@ -76,22 +77,23 @@ def get_data_from_database(sql_query:str)->list:
         return "Operation failed"
 
 @tool
-def create_chart(user_input:str)->str:
-    """ Create a chart based on user input. Returns the URL of the chart."""
+def create_chart(user_request:str,csv_file_url:str)->str:
+    """ Create a chart based on user request. Returns the URL of the chart.
+    
+    Args:
+        user_request (str): A detailed explanation of the user's request with clear context.
+        csv_file_url (str): URL of a csv file.
 
+    Returns:
+        str : URL of created chart.
+    """
+
+    
+    
+    
     try:
-        messages = [
-            {"role": "system", "content": chart_creator_prompt},
-            {"role": "user", "content": user_input}]
-        response=llm.invoke(messages)
-        code=response.content
-
-        with open("generated_script.py", "w") as file:
-            file.write(code)
-        import subprocess
-        venv='venv/Scripts/python.exe'
-        subprocess.Popen([venv, "generated_script.py"])
-        return "Chart is at http://127.0.0.1:8500/"
+        output=chart_creator(user_request,csv_file_url)
+        return output
     
     except Exception as error:
         print(error)

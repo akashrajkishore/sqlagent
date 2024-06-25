@@ -8,8 +8,7 @@ prompt= """
 
     """
 
-chart_creator_prompt="""Your job is to help the user write python code to create a chart using plotly using data from a csv file.
-
- Use the context given to you about the contents of the csv file and create the chart based on the user's request. The code must contain all the required import statements and indentations. ONLY GIVE THE CODE AS OUTPUT, NOTHING ELSE. DO NOT INCLUDE MARKDOOWN NOTATIONS. 
-Context of the csv file: The file has 2 columns, 'counterparty_lastname' and 'risk_category'. The name of the file is 'test.csv'
+chart_creator_prompt="""Your are an assistant that can create charts using data from a csv file based on the user's request.
+    The file has these columns - {columns}. The name of the file is {csv_file_path}. Choose the appropriate tool from the ones given to you.
+    
 """
