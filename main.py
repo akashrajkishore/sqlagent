@@ -1,33 +1,33 @@
 
 from langchain_core.tools import tool
 from typing import Annotated
-from utils import execute_query,write_headings_to_csv,write_rows_to_csv,extract_column_names
-from chart_functions import chart_creator
 from typing_extensions import TypedDict
-from prompts import prompt, chart_creator_prompt
 from langgraph.graph.message import AnyMessage, add_messages
-import csv
-import psycopg2
+from langchain_core.runnables import RunnableLambda, Runnable, RunnableConfig
+from langchain_core.messages import ToolMessage
+from langchain_core.prompts import ChatPromptTemplate
+import uuid
+from langgraph.prebuilt import ToolNode
 from typing import Annotated
+from typing import Literal
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.graph import END, StateGraph
+from langgraph.prebuilt import tools_condition
 import requests
 from langchain_openai import AzureChatOpenAI
-
+from langchain_core.messages.ai import AIMessage
 import re
-from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 import os
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+from chart_functions import chart_creator
+from utils import execute_query,write_headings_to_csv,write_rows_to_csv, get_blob_url, upload_to_blob
+from prompts import prompt
+
 
 load_dotenv()
-
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import Runnable, RunnableConfig
-from typing_extensions import TypedDict
-
-from langgraph.graph.message import AnyMessage, add_messages
-
-azure_key="43acd730f49d47b494589ffefa5028fa"
-api_base = "https://askauraopenai.openai.azure.com/"
-api_version = "2024-02-01"
 
 #------------------------------------------------------------------------------------------------------------------------------Tools
 @tool
@@ -59,9 +59,12 @@ def get_sql_query(user_request:str)->str:
     """Get an SQL query to fulfill the user's request. Returns an SQL query if the operation is successful. 
     Args:
         user_request (str) : The user's request
+
+    Returns:
+        str : An SQL query
     """
 
-    url = 'https://databee-engine.azurewebsites.net/api/v1/prompts/sql-generations'
+    url = os.getenv("DATABEE-ENGINE-URL")
     
     data = {
         "finetuning_id": "",
@@ -69,7 +72,7 @@ def get_sql_query(user_request:str)->str:
         "metadata": {},
         "prompt": {
             "text": user_request,
-            "db_connection_id": "666219d8f359460d6cc32410",
+            "db_connection_id": os.getenv("DB-CONNECTION_ID"),
             "metadata": {}
         },
         "low_latency_mode": False
@@ -112,8 +115,8 @@ def get_data_from_database(sql_query:str)->list:
         
     except:
         return "Operation failed"
+    
 
- 
 @tool
 def create_chart(user_request:str,csv_file_url:str)->str:
     """ Create a chart based on user request. Returns the URL of the chart.
@@ -126,9 +129,6 @@ def create_chart(user_request:str,csv_file_url:str)->str:
         str : URL of created chart.
     """
 
-    
-    
-    
     try:
         output=chart_creator(user_request,csv_file_url)
         return output
@@ -139,10 +139,7 @@ def create_chart(user_request:str,csv_file_url:str)->str:
         
 #----------------------------------------------------------------------------------------------------------------------------Tools End
     
-from langchain_core.runnables import RunnableLambda
-from langchain_core.messages import ToolMessage
 
-from langgraph.prebuilt import ToolNode
 
 
 def handle_tool_error(state) -> dict:
@@ -159,25 +156,9 @@ def handle_tool_error(state) -> dict:
     }
 
 
-from azure.storage.blob import BlobServiceClient
 
-def contains_character(string, char):
-    return char in string
 
-def upload_to_blob(file_path: str, blob_name: str):
 
-    blob_service_client = BlobServiceClient.from_connection_string(os.getenv('AZURE_STORAGE_CONNECTION_STRING'))
-    blob_client = blob_service_client.get_blob_client(
-            container=os.getenv('AZURE_STORAGE_CONTAINER_NAME'), blob=blob_name)
-
-    with open(file_path, "rb") as data:
-            blob_client.upload_blob(data, overwrite=True)
-
-def get_blob_url(blob_name: str) -> str:
-    account_name = os.getenv('AZURE_STORAGE_ACCOUNT_NAME')
-    container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
-   
-    return f"https://{account_name}.blob.core.windows.net/{container_name}/{blob_name}"
 
 def create_tool_node_with_fallback(tools: list) -> dict:
     return ToolNode(tools).with_fallbacks(
@@ -185,20 +166,6 @@ def create_tool_node_with_fallback(tools: list) -> dict:
     )
 
 
-def _print_event(event: dict, _printed: set, max_length=1500):
-    current_state = event.get("dialog_state")
-    if current_state:
-        print(f"Currently in: ", current_state[-1])
-    message = event.get("messages")
-    if message:
-        if isinstance(message, list):
-            message = message[-1]
-        if message.id not in _printed:
-            msg_repr = message.pretty_repr(html=True)
-            if len(msg_repr) > max_length:
-                msg_repr = msg_repr[:max_length] + " ... (truncated)"
-            print(msg_repr)
-            _printed.add(message.id)
 
 
 #-----------------------------------------------------------------------------------------------------------------------------State
@@ -231,10 +198,11 @@ class Assistant:
                 break
         return {"messages": result}
 
-llm = AzureChatOpenAI(deployment_name="chat",
-                      openai_api_key=azure_key,
-                      azure_endpoint=api_base,
-                      api_version=api_version)
+llm = AzureChatOpenAI(deployment_name=os.getenv("DEPLOYMENT_NAME"),
+                      openai_api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                      azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+                      api_version=os.getenv("OPENAI_API_VERSION"),
+                      streaming=True)
 assistant_prompt1 = ChatPromptTemplate.from_messages(
     [
         (
@@ -272,17 +240,13 @@ class Assistant:
                 break
         return {"messages": result}
 
-tools = [get_sql_query,get_data_from_database_and_create_report,get_data_from_database,create_chart]
+tools = [get_sql_query,get_data_from_database,get_data_from_database_and_create_report,create_chart]
 tool_names = {t.name for t in tools}
 
 assistant_runnable = assistant_prompt1 | llm.bind_tools(tools)
 
 #-----------------------------------------------------------------------------------------------------------------------------Graph
-from typing import Literal
 
-from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.graph import END, StateGraph
-from langgraph.prebuilt import tools_condition
 
 builder = StateGraph(State)
 
@@ -317,30 +281,51 @@ builder.add_edge("tools", "assistant")
 memory = SqliteSaver.from_conn_string(":memory:")
 graph = builder.compile(
     checkpointer=memory,
-    # NEW: The graph will always halt before executing the "tools" node.
-    # The user can approve or reject (or even alter the request) before
-    # the assistant continues
+    )
+
+
+def sqlagent(thread_id:str,user_message:str)->str:
+    if not thread_id:
+        thread_id = str(uuid.uuid4())
+
+    config = {"configurable": {"thread_id": thread_id}}
+    print(thread_id)
     
-)
-
-import uuid
-
-
-thread_id = str(uuid.uuid4())
-
-config = {"configurable": {"thread_id": str(uuid.uuid4())}}
-
-
-
-
-_printed = set()
-# We can reuse the tutorial questions from part 1 to see how it does.
-for i in range(100):
-    question=input("Enter message >>")
     events = graph.stream(
-        {"messages": ("user", question)}, config, stream_mode="values"
+        {"messages": ("user", user_message)}, config, stream_mode="values"
     )
     for event in events:
-        _print_event(event, _printed)
+        message = event.get("messages")
+        if isinstance(message, list):
+            message = message[-1]
+        if isinstance(message,AIMessage):
+            if message.content:
+                return thread_id,message.content
     snapshot = graph.get_state(config)
-   
+    
+
+
+app = FastAPI()
+
+# Define input and output models using Pydantic
+class Input(BaseModel):
+    id: str = ""
+    user_message: str 
+
+class Output(BaseModel):
+    id: str
+    sqlagent_message: str
+
+# Endpoint to handle POST requests
+@app.post("/sqlagent", response_model=Output)
+async def process_user_message(data: Input):
+    thread_id = data.id if data.id else ""
+    user_message = data.user_message  
+
+    result = sqlagent(thread_id,user_message)
+    output_thread_id=result[0]
+    sqlagent_message=result[1]
+
+    
+    return Output(id=output_thread_id, sqlagent_message=sqlagent_message)
+

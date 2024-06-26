@@ -1,16 +1,14 @@
 
 from langchain_core.tools import tool
 from typing import Annotated
-from utils import execute_query,write_headings_to_csv,write_rows_to_csv
+from utils import execute_query,write_headings_to_csv,write_rows_to_csv, get_blob_url, upload_to_blob
+from chart_functions import chart_creator
 from typing_extensions import TypedDict
 from prompts import prompt, chart_creator_prompt
 from langgraph.graph.message import AnyMessage, add_messages
-import csv
-import psycopg2
 from typing import Annotated
 import requests
 from langchain_openai import AzureChatOpenAI
-from chart_functions import chart_creator
 
 import re
 from langchain_openai import ChatOpenAI
@@ -44,7 +42,7 @@ def get_data_from_database_and_create_report(sql_query:str)->str:
     write_headings_to_csv(csv_file,col_names)
     write_rows_to_csv(csv_file,data)
    
-    
+        
     # Upload to blob:
     blob_name = csv_file
     upload_to_blob(file_path=csv_file,blob_name=blob_name)
@@ -56,26 +54,64 @@ def get_data_from_database_and_create_report(sql_query:str)->str:
 
 @tool
 def get_sql_query(user_request:str)->str:
-    """Get an SQL query to fulfill the user's request. Returns an SQL query if the operation is successful. """
+    """Get an SQL query to fulfill the user's request. Returns an SQL query if the operation is successful. 
+    Args:
+        user_request (str) : The user's request
+    """
 
-    return "SELECT * FROM dwd_cpty_persons;"
+    url = os.getenv("DATABEE-ENGINE-URL")
+    
+    data = {
+        "finetuning_id": "",
+        "evaluate": False,
+        "metadata": {},
+        "prompt": {
+            "text": user_request,
+            "db_connection_id": os.getenv("DB-CONNECTION_ID"),
+            "metadata": {}
+        },
+        "low_latency_mode": False
+    }
+
+    response = requests.post(url, json=data)
+
+    if response.status_code == 201:
+        print("Status Code:", response.status_code)
+        
+        response_json = response.json()
+
+        sql_query = response_json.get('sql')
+        # To extract the SQL query from the text:
+        pattern = re.compile(r'SELECT.*?;', re.DOTALL | re.IGNORECASE)
+        match = pattern.search(sql_query)
+        return match.group(0)
+
+    else:
+        print("Status code: ",response.status_code)
+        return "Unable to get SQL query"
     
 @tool
 def get_data_from_database(sql_query:str)->list:
-    """A tool that will fetch data from the database using the SQL query and return the output of the executed query"""
-    
+    """A tool that will fetch data from the database using the SQL query and return the output of the executed query
+
+    Args:
+        sql_query (str): The SQL query that is to be executed.
+
+    Returns:
+        str: Output of the executed SQL query
+    """
     try:
-        result = execute_query(sql_query)
-        data = result[1]  # Second item in the tuple
+        output = execute_query(sql_query)
+        data = output[1]  # Second item in the tuple
         if len(data)>1:
             return "output is too long, use the 'get_data_from_database_and_create_report' function"
         else:
-            return data
-
+            return data[0]
         
     except:
         return "Operation failed"
 
+ 
 @tool
 def create_chart(user_request:str,csv_file_url:str)->str:
     """ Create a chart based on user request. Returns the URL of the chart.
@@ -123,23 +159,6 @@ def handle_tool_error(state) -> dict:
 
 from azure.storage.blob import BlobServiceClient
 
-def contains_character(string, char):
-    return char in string
-
-def upload_to_blob(file_path: str, blob_name: str):
-
-    blob_service_client = BlobServiceClient.from_connection_string(os.getenv('AZURE_STORAGE_CONNECTION_STRING'))
-    blob_client = blob_service_client.get_blob_client(
-            container=os.getenv('AZURE_STORAGE_CONTAINER_NAME'), blob=blob_name)
-
-    with open(file_path, "rb") as data:
-            blob_client.upload_blob(data, overwrite=True)
-
-def get_blob_url(blob_name: str) -> str:
-    account_name = os.getenv('AZURE_STORAGE_ACCOUNT_NAME')
-    container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
-   
-    return f"https://{account_name}.blob.core.windows.net/{container_name}/{blob_name}"
 
 def create_tool_node_with_fallback(tools: list) -> dict:
     return ToolNode(tools).with_fallbacks(
@@ -234,7 +253,7 @@ class Assistant:
                 break
         return {"messages": result}
 
-tools = [get_sql_query,get_data_from_database,get_data_from_database_and_create_report,create_chart]
+tools = [get_sql_query,get_data_from_database_and_create_report,get_data_from_database,create_chart]
 tool_names = {t.name for t in tools}
 
 assistant_runnable = assistant_prompt1 | llm.bind_tools(tools)
@@ -305,30 +324,4 @@ for i in range(100):
     for event in events:
         _print_event(event, _printed)
     snapshot = graph.get_state(config)
-    while snapshot.next:
-       
-        user_input = input(
-            "Do you approve of the above actions? Type 'y' to continue;"
-            " otherwise, explain your requested changed.\n\n"
-        )
-        if user_input.strip() == "y":
-            # Just continue
-            result = graph.invoke(
-                None,
-                config,
-            )
-        else:
-            # Satisfy the tool invocation by
-            # providing instructions on the requested changes / change of mind
-            result = graph.invoke(
-                {
-                    "messages": [
-                        ToolMessage(
-                            tool_call_id=event["messages"][-1].tool_calls[0]["id"],
-                            content=f"API call denied by user. Reasoning: '{user_input}'. Continue assisting, accounting for the user's input.",
-                        )
-                    ]
-                },
-                config,
-            )
-        snapshot = graph.get_state(config)
+   

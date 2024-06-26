@@ -1,13 +1,15 @@
 import psycopg2, csv
 import pandas as pd
+from azure.storage.blob import BlobServiceClient
+import os
 
 def execute_query(query):
     db_params = {
-        'dbname': 'postgres',
-        'user': 'aura_admin',
-        'password': 'England125',
-        'host': 'auradata.postgres.database.azure.com',  # e.g., 'localhost' or '127.0.0.1'
-        'port': '5432'  # e.g., '5432'
+        'dbname': os.getenv("DB-NAME"),
+        'user': os.getenv("USER"),
+        'password': os.getenv("PASSWORD"),
+        'host': os.getenv("HOST"),
+        'port': os.getenv("PORT")
     }
     data=[]
     try:
@@ -113,3 +115,17 @@ def extract_column_names(csv_file_path):
         print(f"Error: The file at {csv_file_path} could not be parsed.")
         return []
     
+def upload_to_blob(file_path: str, blob_name: str):
+
+    blob_service_client = BlobServiceClient.from_connection_string(os.getenv('AZURE_STORAGE_CONNECTION_STRING'))
+    blob_client = blob_service_client.get_blob_client(
+            container=os.getenv('AZURE_STORAGE_CONTAINER_NAME'), blob=blob_name)
+
+    with open(file_path, "rb") as data:
+            blob_client.upload_blob(data, overwrite=True)
+
+def get_blob_url(blob_name: str) -> str:
+    account_name = os.getenv('AZURE_STORAGE_ACCOUNT_NAME')
+    container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
+   
+    return f"https://{account_name}.blob.core.windows.net/{container_name}/{blob_name}"

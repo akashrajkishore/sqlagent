@@ -5,30 +5,13 @@ from prompts import chart_creator_prompt
 from utils import extract_column_names,download_csv
 from urllib.parse import urlparse
 import os
-
 from langchain_core.tools import tool
-from typing import Annotated
-from utils import execute_query,write_headings_to_csv,write_rows_to_csv,extract_column_names
-from typing_extensions import TypedDict
-from prompts import prompt, chart_creator_prompt
-from langgraph.graph.message import AnyMessage, add_messages
-import csv
-import psycopg2
-from typing import Annotated
-import requests
+from utils import extract_column_names, get_blob_url, upload_to_blob
+from prompts import chart_creator_prompt
+
 from langchain_openai import AzureChatOpenAI
-from langchain_core.messages import HumanMessage, ToolMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
-from langchain_core.runnables import Runnable, RunnableConfig
-from typing_extensions import TypedDict
-from langchain_core.runnables import RunnableLambda
-from langchain_core.messages import ToolMessage
-
-from langgraph.prebuilt import ToolNode
-
-from langgraph.graph.message import AnyMessage, add_messages
-
-import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -39,14 +22,12 @@ from typing_extensions import TypedDict
 
 from langgraph.graph.message import AnyMessage, add_messages
 
-azure_key="43acd730f49d47b494589ffefa5028fa"
-api_base = "https://askauraopenai.openai.azure.com/"
-api_version = "2024-02-01"
 
-llm = AzureChatOpenAI(deployment_name="chat",
-                      openai_api_key=azure_key,
-                      azure_endpoint=api_base,
-                      api_version=api_version,
+
+llm = AzureChatOpenAI(deployment_name=os.getenv("DEPLOYMENT_NAME"),
+                      openai_api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                      azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+                      api_version=os.getenv("OPENAI_API_VERSION"),
                       streaming=True)
 
 
@@ -78,10 +59,15 @@ def create_bar_chart(csv_file_name:str,chart_title:str,x_axis:str,y_axis:str,gro
     else:
         fig = px.bar(data, x=x_axis, y=y_axis, title=chart_title)
 
-    fig.write_html("chart.html")
-    print("chart.html is created")
+    chart_file_path = csv_file_name.rsplit('.', 1)[0]+".html"
+    fig.write_html(chart_file_path)
+    print(chart_file_path," is created")
 
-    return "chart URL - http://exampleurl.com/"
+    blob_name=chart_file_path
+    upload_to_blob(file_path=chart_file_path,blob_name=blob_name)
+    blob_url = get_blob_url(blob_name)
+
+    return blob_url
 
     
 @tool
@@ -109,10 +95,15 @@ def create_pie_chart(csv_file_name:str,chart_title:str,values:str,label:str,grou
     else:
         fig = px.pie(data, values=values, names=label, title=chart_title)
 
-    fig.write_html("chart.html")
-    print("chart.html is created")
+    chart_file_path = csv_file_name.rsplit('.', 1)[0]+".html"
+    fig.write_html(chart_file_path)
+    print(chart_file_path," is created")
 
-    return "chart URL - http://exampleurl.com/"
+    blob_name=chart_file_path
+    upload_to_blob(file_path=chart_file_path,blob_name=blob_name)
+    blob_url = get_blob_url(blob_name)
+
+    return blob_url
 
 
 @tool
@@ -124,14 +115,21 @@ def create_line_chart(csv_file_name:str,chart_title:str,x_axis:str,y_axis:str):
         chart_title (str) : Title of the chart
         x_axis (str) : x axis value
         y_axis (str) : y axis value
+
+    Returns:
+        str : URL of the created chart
     """
     data = pd.read_csv(csv_file_name,encoding='latin-1')
     fig = px.line(data, x=x_axis, y=y_axis, title=chart_title)
-    fig.write_html("chart.html")
-    print("chart.html is created")
+    chart_file_path = csv_file_name.rsplit('.', 1)[0]+".html"
+    fig.write_html(chart_file_path)
+    print(chart_file_path," is created")
 
+    blob_name=chart_file_path
+    upload_to_blob(file_path=chart_file_path,blob_name=blob_name)
+    blob_url = get_blob_url(blob_name)
 
-    return "chart URL - http://exampleurl.com/"
+    return blob_url
     
 
 
